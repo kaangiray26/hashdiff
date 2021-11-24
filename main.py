@@ -2,9 +2,12 @@
 #-*- encoding: utf-8 -*-
 
 import os
+import sys
 import json
 import sqlite3
 from hashlib import md5
+
+from tabulate import tabulate
 
 class Inspector:
     def __init__(self):
@@ -26,7 +29,7 @@ class Inspector:
                  filepath     str NOT NULL,
                  size     int NOT NULL,
                  size_hr  str NOT NULL,
-                 flag     str)''' %(i))
+                 flag     str DEFAULT "diff")''' %(i))
             self.db.commit()
 
     def db_add(self, table, data):
@@ -61,8 +64,6 @@ class Inspector:
             self.save_config()
 
     def normalize(self, psize, k):
-        print("psize:", psize)
-        print("k:", k)
         if k > 9:
             return "Filesize too big..."
         if psize < 1000:
@@ -76,21 +77,60 @@ class Inspector:
             hash     = md5(f.read()).hexdigest()
             filename = os.path.basename(filepath)
             size     = os.path.getsize(filepath)
-            print("size", size)
             size_hr  = self.normalize(size, 1)
-            print("size_hr:", size_hr)
             return (hash, filename, filepath, size, size_hr)
 
     def crawler(self):
+        src_index = 1
         for src in self.config["sources"]:
+            print("\nSrc: %s/%s" %(src_index, len(self.config["sources"])))
             src_files = []
             for root, dirs, files in os.walk(src):
-                print("root:", root)
                 for f in files:
                     src_files.append(os.path.join(root, f))
+
+            f_index = 1
             for f in src_files:
+                sys.stdout.write('\rAdding: File %s of %s' %(f_index, len(src_files)))
+                sys.stdout.flush()
                 self.db_add("files%s"%(self.config["sources"].index(src)), self.get_data_from_file(f))
+                f_index += 1
+
+            src_index += 1
+
+    def compare(self):
+        src_files = []
+        for i in range(0, len(self.config["sources"])):
+            cursor     = self.db.execute("SELECT hash FROM files%s" %(i))
+            hashes     = cursor.fetchall()
+            hash_array = []
+            for hash in hashes:
+                hash_array.append(hash[0])
+            src_files.append(hash_array)
+        
+        hash_index = 1
+        for hash in src_files[0]:
+            sys.stdout.write('\rComparing: Hash %s of %s' %(hash_index, len(src_files[0])))
+            sys.stdout.flush()
+            if hash in src_files[1]:
+                self.db.execute("UPDATE files0 SET flag=? WHERE hash=?", ("common", hash))
+                self.db.commit()
+                self.db.execute("UPDATE files1 SET flag=? WHERE hash=?", ("common", hash))
+                self.db.commit()
+            hash_index += 1
+    
+    def get_diff(self):
+        cursor0 = self.db.execute("SELECT * FROM files0 WHERE flag='diff'")
+        files0   = cursor0.fetchall()
+        cursor1 = self.db.execute("SELECT * FROM files1 WHERE flag='diff'")
+        files1   = cursor1.fetchall()
+        print("\n")
+        print(tabulate(files0, headers=["id", "hash", "filename", "filepath", "size", "size_hr", "flag"], tablefmt="pretty"))
+        print(tabulate(files1, headers=["id", "hash", "filename", "filepath", "size", "size_hr", "flag"], tablefmt="pretty"))
+
 ## TEST
 if __name__ == "__main__":
     clouseau = Inspector()
     clouseau.crawler()
+    clouseau.compare()
+    clouseau.get_diff()
