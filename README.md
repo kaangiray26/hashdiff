@@ -1,2 +1,2 @@
 # hashdiff
-Compare multiple folders and try to analyze common files
+Compare multiple folders and to find common and distinct files
