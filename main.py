@@ -98,6 +98,18 @@ class Inspector:
 
             src_index += 1
 
+    def crawl(self, src, index):
+        src_files = []
+        for root, dirs, files in os.walk(src):
+            for f in files:
+                src_files.append(os.path.join(root, f))
+        f_index = 1
+        for f in src_files:
+            sys.stdout.write('\rAdding: File %s of %s' %(f_index, len(src_files)))
+            sys.stdout.flush()
+            self.db_add("files%s"%(index), self.get_data_from_file(f))
+            f_index += 1
+
     def compare(self):
         src_files = []
         for i in range(0, len(self.config["sources"])):
@@ -132,5 +144,5 @@ class Inspector:
 if __name__ == "__main__":
     clouseau = Inspector()
     clouseau.crawler()
-    clouseau.compare()
-    clouseau.get_diff()
+    #clouseau.compare()
+    #clouseau.get_diff()
